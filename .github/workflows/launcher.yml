@@ -1,0 +1,27 @@
+name: Public launcher checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - run: python3 -m unittest discover -s tests -p 'test_launcher.py' -v
+      - run: python3 tools/macos/audit_public.py --history
+  native-launcher:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: python3 -m unittest discover -s tests -p 'test_launcher.py' -v
+      - run: python3 tools/macos/build_launcher.py --zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-launcher-preview-arm64
+          path: dist/lego-island-2-macos-0.2.0-preview-arm64.zip
+          if-no-files-found: error

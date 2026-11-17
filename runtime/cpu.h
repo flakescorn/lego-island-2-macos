@@ -2,13 +2,20 @@
  *
  * The program's code and data sit at their original addresses in this process (the image is
  * mapped at 0x400000 and every allocation the program sees is below 2 GB), so a program
- * address is a host pointer. Registers are C locals inside each generated function and are
+ * address is a host pointer on Linux; macOS adds guest_memory to the 32-bit offset. Registers are C locals inside each generated function and are
  * written back to the CPU record around calls; the x87 stack lives in the CPU record and is
- * computed in the host's 80-bit long double with the program's own control word. */
+ * computed in the host's long double (80-bit on x86; experimental 64-bit on ARM64). */
 #pragma once
 #include <stdint.h>
 #include <string.h>
+#if defined(__aarch64__)
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/sse2.h>
+#include <math.h>
+#include "fpu_arm64.h"
+#else
 #include <immintrin.h>
+#endif
 
 typedef long double f80;
 
@@ -55,7 +62,12 @@ typedef uint8_t u8a __attribute__((may_alias));
 typedef uint16_t u16a __attribute__((may_alias, aligned(1)));
 typedef uint32_t u32a __attribute__((may_alias, aligned(1)));
 typedef uint64_t u64a __attribute__((may_alias, aligned(1)));
+#ifdef __APPLE__
+extern uint8_t *guest_memory;
+#define GP(a) ((uintptr_t)guest_memory + (uint32_t)(a))
+#else
 #define GP(a) ((uintptr_t)(uint32_t)(a))
+#endif
 
 /* The generated code (CPU_FAST_MEM) accesses program memory as ordinary memory, so the compiler
    can keep values in registers and merge accesses; each loop pass and each call still reads
@@ -80,7 +92,13 @@ static inline void W64(uint32_t a, uint64_t v) { *(GVOL u64a *)GP(a) = v; }
 
 static inline float RF32(uint32_t a) { uint32_t u = R32(a); float f; memcpy(&f, &u, 4); return f; }
 static inline double RF64(uint32_t a) { uint64_t u = R64(a); double f; memcpy(&f, &u, 8); return f; }
+#if defined(__aarch64__)
+f80 fpu_read80(const void *p);
+void fpu_write80(void *p, f80 v);
+static inline f80 RF80(uint32_t a) { return fpu_read80((const void *)GP(a)); }
+#else
 static inline f80 RF80(uint32_t a) { f80 v = 0; memcpy(&v, (const void *)GP(a), 10); return v; }
+#endif
 static inline void WF32(uint32_t a, float f) { uint32_t u; memcpy(&u, &f, 4); W32(a, u); }
 static inline void WF64(uint32_t a, double f) { uint64_t u; memcpy(&u, &f, 8); W64(a, u); }
 /* The x87 stores to memory (fst/fstp m32/m64), with their instruction's address: plain stores,
@@ -108,7 +126,11 @@ f80 fstep_pow(f80 v);
 int64_t fpu_ftol_dither(f80 v, uint32_t *n);   /* _ftol of a per-frame amount (FRAME_STEPS dither) */
 uint32_t fcount(uint32_t frames);       /* a number of frames at 30 a second, at the frame rate */
 int framerate_tick_call(CPU *c, void (*orig)(CPU *), uint32_t fn);   /* builds/en_v2.py TICKS */
+#if defined(__aarch64__)
+static inline void WF80(uint32_t a, f80 v) { fpu_write80((void *)GP(a), v); }
+#else
 static inline void WF80(uint32_t a, f80 v) { memcpy((void *)GP(a), &v, 10); }
+#endif
 
 /* rep movs / rep stos on the generated function's locals */
 void rep_movs(CPU *c, int n, uint32_t src, uint32_t dst, uint32_t count);
@@ -132,6 +154,15 @@ static inline void fpu_com(CPU *c, f80 a, f80 b)
     else cc = 0;
     c->fsw = (uint16_t)((c->fsw & ~0x4700) | cc);
 }
+#if defined(__aarch64__)
+static inline int16_t fpu_ist16(f80 v) { return (int16_t)arm_fpu_int(v, 16, 0); }
+static inline int32_t fpu_ist32(f80 v) { return (int32_t)arm_fpu_int(v, 32, 0); }
+static inline int64_t fpu_ist64(f80 v) { return arm_fpu_int(v, 64, 0); }
+static inline int64_t fpu_ftol(f80 v) { return arm_fpu_int(v, 64, 1); }
+static inline f80 fpu_fsqrt(f80 v) { return sqrtl(v); }
+static inline f80 fpu_fabs(f80 v) { return fabsl(v); }
+static inline f80 fpu_frndint(f80 v) { return rintl(v); }
+#else
 static inline int16_t fpu_ist16(f80 v) { int16_t r; __asm__("fistps %0" : "=m"(r) : "t"(v) : "st"); return r; }
 static inline int32_t fpu_ist32(f80 v) { int32_t r; __asm__("fistpl %0" : "=m"(r) : "t"(v) : "st"); return r; }
 static inline int64_t fpu_ist64(f80 v) { int64_t r; __asm__("fistpll %0" : "=m"(r) : "t"(v) : "st"); return r; }
@@ -141,13 +172,19 @@ static inline f80 fpu_fsqrt(f80 v) { __asm__("fsqrt" : "+t"(v)); return v; }
 static inline f80 fpu_fabs(f80 v) { __asm__("fabs" : "+t"(v)); return v; }
 static inline f80 fpu_frndint(f80 v) { __asm__("frndint" : "+t"(v)); return v; }
 
+#endif
+
 void fpu_setcw(CPU *c, uint32_t cw);
 extern int fpu_sw_exceptions;
 static inline uint32_t fpu_sw(CPU *c)  /* FNSTSW: condition bits, top, the host's exception bits */
 {
     uint16_t sw = 0;
+#if defined(__aarch64__)
+    if (fpu_sw_exceptions) sw = arm_fpu_status();
+#else
     if (fpu_sw_exceptions)
         __asm__ volatile("fnstsw %0" : "=am"(sw));
+#endif
     return (c->fsw & 0x4700u) | ((c->ftop & 7) << 11) | (sw & 0x3fu);
 }
 void fpu_clex(CPU *c);

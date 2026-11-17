@@ -3,7 +3,7 @@
 # Python with Capstone: the repository's .venv if there is one
 PY ?= $(firstword $(wildcard .venv/bin/python) python3)
 GAME ?= $(HOME)/.local/share/li2-native/game
-BUILD_CFG ?= builds/en_v2.py
+BUILD_CFG ?= $(if $(filter Darwin,$(shell uname -s)),builds/en_v1.py,builds/en_v2.py)
 # Parallel compiles: keep it modest so the machine stays usable (the generated files are big).
 JOBS ?= 8
 MAKEFLAGS += -j$(JOBS)
@@ -15,7 +15,16 @@ CFLAGS_GEN = $(CFLAGS_COMMON) $(GEN_OPT) -w -DCPU_FAST_MEM
 CFLAGS_RT = $(CFLAGS_COMMON) -O2 -Wall -Wextra -Wno-unused-parameter -Wno-format-truncation -Wno-missing-field-initializers
 LDFLAGS = -rdynamic $(SDL3)/lib/libSDL3.a -pthread -lm -ldl -lz -lvulkan
 
+ifeq ($(shell uname -s),Darwin)
+include tools/macos/Makefile.inc
+endif
+
 RT_SRC = $(wildcard runtime/*.c)
+ifeq ($(notdir $(BUILD_CFG)),en_v1.py)
+RT_SRC := $(filter-out runtime/game.c runtime/menu.c runtime/skin.c runtime/native.c,$(RT_SRC))
+else
+RT_SRC := $(filter-out runtime/game_v1.c,$(RT_SRC))
+endif
 RT_OBJ = $(patsubst runtime/%.c,build/obj/rt_%.o,$(RT_SRC))
 # The code files recomp.py wrote, listed in gen/files.mk once it has run
 -include gen/files.mk
@@ -25,7 +34,7 @@ GEN_OBJ = $(patsubst gen/%.c,build/obj/gen_%.o,$(GEN_SRC))
 all: build/li2
 
 gen/funcs.h: $(filter-out tools/icon.py tools/profile.py tools/memdiff.py tools/ftrace_cmp.py tools/prompts_atlas.py,$(wildcard tools/*.py)) $(BUILD_CFG)
-	$(PY) tools/recomp.py $(GAME) $(BUILD_CFG) gen
+	$(PY) tools/recomp.py "$(GAME)" "$(BUILD_CFG)" gen
 gen/table.c gen/stubs.c gen/image.h: gen/funcs.h ;
 gen/files.mk: gen/funcs.h
 	@echo 'GEN_CODE = $(sort $(wildcard gen/code_*.c))' > $@
@@ -51,8 +60,14 @@ shaders: $(SPV_H)
 # patched copy), the music of dmusic.c
 DM = third_party/dmusic
 DM_SRC = $(filter-out %/Thread.Win32.c %/Thread.Posix.c,$(wildcard $(DM)/src/*.c $(DM)/src/*/*.c)) $(DM)/vendor/TinySoundFont/tsf.c
+ifeq ($(shell uname -s),Darwin)
+DM_SRC += $(DM)/src/thread/Thread.Posix.c
+DM_THREAD_FLAGS =
+else
+DM_THREAD_FLAGS = -D_DM_USE_NATIVE_THREAD=1
+endif
 DM_OBJ = $(patsubst $(DM)/%.c,build/obj/dm/%.o,$(DM_SRC))
-CFLAGS_DM = -std=gnu11 -O2 -g -w -DDM_STATIC=1 -DDM_BUILD=1 -D_DM_USE_NATIVE_THREAD=1 -I$(DM)/include -I$(DM)/src -I$(DM)/vendor/TinySoundFont
+CFLAGS_DM = -std=gnu11 -O2 -g -w -DDM_STATIC=1 -DDM_BUILD=1 $(DM_THREAD_FLAGS) -I$(DM)/include -I$(DM)/src -I$(DM)/vendor/TinySoundFont
 build/obj/dm/%.o: $(DM)/%.c | build/obj
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_DM) -c $< -o $@

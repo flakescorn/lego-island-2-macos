@@ -2832,10 +2832,22 @@ static int init(void)
                 }
         free(ep);
     }
-    VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "1NSANE native",
+    /* Loader builds advertise portability enumeration; direct MoltenVK does not. */
+    uint32_t en = 0;
+    int portability_enumeration = 0;
+    vkEnumerateInstanceExtensionProperties(NULL, &en, NULL);
+    VkExtensionProperties *available = calloc(en ? en : 1, sizeof *available);
+    if (available && vkEnumerateInstanceExtensionProperties(NULL, &en, available) == VK_SUCCESS)
+        for (uint32_t i = 0; i < en; i++)
+            if (!strcmp(available[i].extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+                portability_enumeration = 1;
+    free(available);
+    if (portability_enumeration) exts[next++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+    VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "LEGO Island 2 native",
                              .apiVersion = VK_API_VERSION_1_3};
     VkInstanceCreateInfo ici = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
                                 .enabledExtensionCount = next, .ppEnabledExtensionNames = exts};
+    if (portability_enumeration) ici.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     const char *layer = "VK_LAYER_KHRONOS_validation";
     const char *val = getenv("LI2_VK_VALIDATE");
     if (val && *val && strcmp(val, "0")) {
@@ -2891,6 +2903,9 @@ static int init(void)
     uint32_t ndext = 0;
     if (window)
         dext[ndext++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+#ifdef __APPLE__
+    dext[ndext++] = "VK_KHR_portability_subset";
+#endif
     /* ray-traced shadows: ray queries on a real GPU (llvmpipe has them too, far too slowly) */
     VkPhysicalDeviceAccelerationStructureFeaturesKHR fas = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, .accelerationStructure = VK_TRUE};
@@ -3003,7 +3018,11 @@ static int init(void)
         logmsg(LOG_ALWAYS, "Vulkan: cannot create the device with ray queries (%d); shadows stay as shipped", r);
         rt_ok = 0;
         dlss_want = 0;                          /* (its extensions go too) */
-        dci.enabledExtensionCount = window ? 1 : 0;
+        dci.enabledExtensionCount = (window ? 1 : 0)
+#ifdef __APPLE__
+            + 1
+#endif
+            ;
         f12.bufferDeviceAddress = f12.shaderSampledImageArrayNonUniformIndexing = VK_FALSE;
         f12.pNext = taa_ok ? &f11 : NULL;
         f11.pNext = NULL;

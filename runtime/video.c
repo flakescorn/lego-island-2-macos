@@ -149,6 +149,7 @@ int video_playing(void) { return playing != NULL; }
    stops a skippable movie on any WM_KEYDOWN, and in its loop the game reads no DirectInput, so
    the button is handed to it as an Escape key press. (The keyboard's own keys get there as they
    are.) */
+uint32_t game_movie_skip_flag(void);
 void video_skip_press(void)
 {
     if (!playing || !playing->running)
@@ -180,7 +181,7 @@ static uint32_t open_movie(Movie *m, uint32_t wpath)
        0x81c693 keeps it at 0x5d51700, which the movie window procedure 0x81ce72 checks on
        WM_KEYDOWN) [verified: the instructions]: made 1 for the three */
     if (intro)
-        W32(0x5d51700u, 1);
+        W32(game_movie_skip_flag(), 1);
     if (!path_to_host(win, host, sizeof host, 0)) {
         LOG(LOG_ALWAYS, "movie %s: no such file", win);
         return VFW_E_NOT_FOUND;

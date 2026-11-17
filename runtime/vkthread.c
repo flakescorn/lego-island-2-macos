@@ -465,7 +465,7 @@ static void *render_main(void *arg)
         for (int i = 0; i < 2000 && !got; i++) {
             got = at < atomic_load(&head->ready) || atomic_load(&head->closed) || atomic_load(&quit);
             if (!got)
-                __builtin_ia32_pause();
+                host_cpu_relax();
         }
         if (got)
             continue;
@@ -591,7 +591,7 @@ static int snap_take(Surface *s)
     /* the render thread may be reading these pixels now (it looked before the copy was there):
        its call ends first */
     while (atomic_load(&rd_s) == s && atomic_load(&done) < nput)
-        __builtin_ia32_pause();
+        host_cpu_relax();
     return 1;
 }
 

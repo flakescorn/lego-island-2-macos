@@ -65,12 +65,12 @@ void capture_point(CPU *c, uint32_t fn)
         put(f, c, sizeof *c);
         uint32_t r[2] = {IMAGE_BASE, IMAGE_SIZE};
         put(f, r, 8);
-        put(f, (const void *)(uintptr_t)IMAGE_BASE, IMAGE_SIZE);
+        put(f, (const void *)GP(IMAGE_BASE), IMAGE_SIZE);
         for (int k = 0, n = mem_region_count(); k < n; k++) {
             mem_region(k, &r[0], &r[1]);
             if (!r[1]) continue;
             put(f, r, 8);
-            put(f, (const void *)(uintptr_t)r[0], r[1]);
+            put(f, (const void *)GP(r[0]), r[1]);
         }
         r[0] = r[1] = 0;
         put(f, r, 8);

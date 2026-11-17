@@ -119,9 +119,18 @@ static void *resolve(void *ctx, char const *name, size_t *len)
     char path[1400];
     int ok = (search_dir[0] && find_in(search_dir, base, 0, path, sizeof path)) ||
              (dm_root[0] && find_in(dm_root, base, 1, path, sizeof path));
+    /* The English Version 1 disc names this segment Town Bridge.sgt, although the
+       executable requests Lego Town Bridge.sgt. Preserve the user's files. */
+    if (!ok && !strcasecmp(base, "Lego Town Bridge.sgt") && dm_root[0]) {
+        ok = find_in(dm_root, "Town Bridge.sgt", 1, path, sizeof path);
+        if (ok) LOG(LOG_ALWAYS,"DirectMusic: using Town Bridge.sgt for the Version 1 filename alias");
+    }
     if (!ok && !strcasecmp(base, "gm.dls")) {
         char p[1200];
         ok = path_to_host("gm.dls", p, sizeof p, 0);
+        /* Some original DirectX redistributables name the same-format bank gm16.dls.
+           It remains an external, user-provided file, never part of the application. */
+        if (!ok) ok = path_to_host("gm16.dls", p, sizeof p, 0);
         if (ok) snprintf(path, sizeof path, "%s", p);
     }
     if (!ok) {

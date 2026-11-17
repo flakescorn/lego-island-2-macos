@@ -19,9 +19,8 @@ static int nregions, cap_regions;
 
 void mem_init(void)
 {
-    void *m = mmap((void *)(uintptr_t)ARENA_START, ARENA_END - ARENA_START, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
-    if (m != (void *)(uintptr_t)ARENA_START)
+    void *m = guest_map((void *)GP(ARENA_START), ARENA_END - ARENA_START, PROT_READ | PROT_WRITE);
+    if (m != (void *)GP(ARENA_START))
         fatal("cannot reserve program memory at %08x: %s", ARENA_START, strerror(errno));
     process_heap = heap_create(0, 0);
 }
@@ -114,13 +113,15 @@ uint32_t vm_alloc(uint32_t addr, uint32_t size, int reserve_only)
    gets it and memory hashes and dumps never read it. */
 uint32_t vm_alloc_table(uint32_t bytes)
 {
-    uint32_t size = (bytes + 0xfff) & ~0xfffu;
+    uint32_t page = guest_page_size();
+    uint32_t size = (bytes + page - 1) & ~(page - 1);
     if (!(size & 0xffff))
-        size += 0x1000;
+        size += page;
     uint32_t mem = vm_alloc(0, size, 0);
     if (!mem)
         return 0;
-    mprotect((void *)(uintptr_t)(mem + size), 0x1000, PROT_NONE);
+    if (mprotect((void *)GP(mem + size), page, PROT_NONE))
+        fatal("cannot protect table guard page: %s", strerror(errno));
     return mem + size - bytes;
 }
 
@@ -132,7 +133,7 @@ int vm_free(uint32_t addr, uint32_t size, int release)
     if (k >= 0) {
         if (release) {
             if (regions[k].base == addr) {
-                madvise((void *)(uintptr_t)addr, regions[k].size, MADV_DONTNEED);
+                guest_discard(addr, regions[k].size);
                 memmove(&regions[k], &regions[k + 1], (nregions - k - 1) * sizeof *regions);
                 nregions--;
                 ok = 1;
@@ -140,7 +141,7 @@ int vm_free(uint32_t addr, uint32_t size, int release)
         } else {
             uint32_t a = addr & ~0xfffu;
             uint32_t e = size ? (addr + size + 0xfff) & ~0xfffu : regions[k].base + regions[k].size;
-            madvise((void *)(uintptr_t)a, e - a, MADV_DONTNEED);
+            guest_discard(a, e - a);
             ok = 1;
         }
     }
@@ -466,7 +467,7 @@ void rep_stos(CPU *c, int n, uint32_t dst, uint32_t value, uint32_t count)
 
 static uint64_t hash_range(uint64_t h, uint32_t a, uint32_t n)
 {
-    const uint64_t *p = (const uint64_t *)(uintptr_t)a;
+    const uint64_t *p = (const uint64_t *)GP(a);
     for (uint32_t i = 0; i < n / 8; i++) {
         h ^= p[i];
         h *= 0x100000001b3ull;
@@ -516,13 +517,13 @@ void mem_dump(const char *path)
     if (!f) fatal("cannot write %s", path);
     uint32_t hdr[2] = {IMAGE_BASE, IMAGE_SIZE};
     fwrite(hdr, 4, 2, f);
-    fwrite((void *)(uintptr_t)IMAGE_BASE, 1, IMAGE_SIZE, f);
+    fwrite((void *)GP(IMAGE_BASE), 1, IMAGE_SIZE, f);
     pthread_mutex_lock(&mem_lock);
     for (int i = 0; i < nregions; i++) {
         hdr[0] = regions[i].base;
         hdr[1] = regions[i].size;
         fwrite(hdr, 4, 2, f);
-        fwrite((void *)(uintptr_t)regions[i].base, 1, regions[i].size, f);
+        fwrite((void *)GP(regions[i].base), 1, regions[i].size, f);
     }
     pthread_mutex_unlock(&mem_lock);
     fclose(f);
@@ -545,7 +546,7 @@ int mem_find_all(const void *needle, uint32_t n, uint32_t *found, int max)
     int k = 0;
     pthread_mutex_lock(&mem_lock);
     for (int i = 0; i < nregions && k < max; i++) {
-        const uint8_t *base = (const uint8_t *)(uintptr_t)regions[i].base, *p = base;
+        const uint8_t *base = (const uint8_t *)GP(regions[i].base), *p = base;
         size_t left = regions[i].size;
         while (k < max && left >= n) {
             const uint8_t *q = memmem(p, left, needle, n);

@@ -15,6 +15,9 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <CommonCrypto/CommonDigest.h>
+#endif
 #include "runtime.h"
 #include "image.h"
 #include "input.h"
@@ -385,6 +388,15 @@ static void load_module(const ModuleEntry *me)
     if (read(fd, f, st.st_size) != st.st_size)
         fatal("cannot read %s", path);
     close(fd);
+#ifdef __APPLE__
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    char actual[CC_SHA256_DIGEST_LENGTH * 2 + 1];
+    if ((uint64_t)st.st_size > UINT32_MAX) fatal("executable is too large: %s", path);
+    CC_SHA256(f, (CC_LONG)st.st_size, digest);
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) snprintf(actual + i * 2, 3, "%02x", digest[i]);
+    if (strcmp(actual, me->sha256))
+        fatal("wrong executable version: %s\nexpected SHA-256 %s\nfound SHA-256    %s", path, me->sha256, actual);
+#endif
     uint32_t pe = rd32(f + 0x3c);
     if (memcmp(f + pe, "PE\0\0", 4))
         fatal("%s is not a Windows program", path);
@@ -398,12 +410,11 @@ static void load_module(const ModuleEntry *me)
         /* inside the program's memory: taken from it like any allocation at a chosen address */
         if (vm_alloc(me->base, size, 0) != me->base)
             fatal("cannot place %s at %08x", me->name, me->base);
-        m = (void *)(uintptr_t)me->base;
+        m = (void *)GP(me->base);
         memset(m, 0, size);
     } else {
-        m = mmap((void *)(uintptr_t)me->base, size, PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-        if (m != (void *)(uintptr_t)me->base)
+        m = guest_map((void *)GP(me->base), size, PROT_READ | PROT_WRITE);
+        if (m != (void *)GP(me->base))
             fatal("cannot map %s at %08x: %s", me->name, me->base, strerror(errno));
     }
     uint32_t hdrsize = rd32(opt + 60);
@@ -602,7 +613,7 @@ static void frame_limit(void)
             nanosleep(&ts, NULL);
         }
         while ((now = real_ms()) < next)
-            __builtin_ia32_pause();
+            host_cpu_relax();
     }
     next = (next > now - limit_ms ? next : now) + limit_ms;    /* (a frame late: from now) */
     if (ft_on) ft_after = real_ms();
@@ -828,11 +839,24 @@ int main(int argc, char **argv)
     snprintf(user_dir, sizeof user_dir, "%s/li2-native", home ? home : ".");
     for (char *p = user_dir; *p; p++)
         if (*p == '\\') *p = '/';
+#elif defined(__APPLE__)
+    const char *home = getenv("HOME");
+    snprintf(user_dir, sizeof user_dir, "%s/Library/Application Support/li2-native", home ? home : ".");
 #else
     const char *home = getenv("HOME");
     snprintf(user_dir, sizeof user_dir, "%s/.local/share/li2-native", home ? home : ".");
 #endif
     snprintf(game_dir, sizeof game_dir, "%s/game", user_dir);
+#ifdef __APPLE__
+    /* Finder launches have no command-line arguments. Keep game files outside the app. */
+    char location[1200];
+    snprintf(location, sizeof location, "%s/game-location.txt", user_dir);
+    FILE *location_file = fopen(location, "r");
+    if (location_file) {
+        if (fgets(game_dir, sizeof game_dir, location_file)) game_dir[strcspn(game_dir, "\r\n")] = 0;
+        fclose(location_file);
+    }
+#endif
     const char *logpath = NULL;
     /* Started without arguments (a double click) or with --play (the applications-menu entry) it
        plays: full screen unless options.txt's display says window, the log in the user folder. With
@@ -901,7 +925,15 @@ int main(int argc, char **argv)
             logpath = default_log;
         }
     }
-    mkdir(user_dir, 0755);
+    /* --user and Application Support may name a path whose parents do not yet exist. */
+    char parent[sizeof user_dir];
+    snprintf(parent, sizeof parent, "%s", user_dir);
+    for (char *p = parent + 1; *p; p++) if (*p == '/') {
+        *p = 0;
+        if (mkdir(parent, 0755) && errno != EEXIST) fatal("cannot create %s: %s", parent, strerror(errno));
+        *p = '/';
+    }
+    if (mkdir(user_dir, 0755) && errno != EEXIST) fatal("cannot create %s: %s", user_dir, strerror(errno));
     if (logpath) {
         logfp = fopen(logpath, "w");
         if (!logfp)

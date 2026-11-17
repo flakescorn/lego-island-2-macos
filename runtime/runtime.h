@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include "cpu.h"
+#include "platform.h"
 
 /* ------------------------------------------------------------------ generated tables */
 typedef struct { uint32_t addr; void (*fn)(CPU *c); } FuncEntry;
@@ -102,8 +103,8 @@ uint32_t galloc(uint32_t size);
 int mem_find_all(const void *needle, uint32_t n, uint32_t *found, int max);
 void gfree(uint32_t p);
 uint32_t gstrdup(const char *s);
-static inline char *gptr(uint32_t a) { return (char *)(uintptr_t)a; }
-static inline const char *gstr(uint32_t a) { return a ? (const char *)(uintptr_t)a : NULL; }
+static inline char *gptr(uint32_t a) { return (char *)GP(a); }
+static inline const char *gstr(uint32_t a) { return a ? (const char *)GP(a) : NULL; }
 void gstrncpy(uint32_t dst, const char *src, uint32_t n);   /* always terminates if n > 0 */
 /* the program's UTF-16 strings: read into a host buffer (Latin-1 range kept, others '?') and
    written back (cap in characters, always terminated; returns the length written) */

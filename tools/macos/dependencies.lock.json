@@ -1,0 +1,32 @@
+[
+  {
+    "name": "SDL3",
+    "url": "https://www.libsdl.org/release/SDL3-3.4.18.tar.gz",
+    "sha256": "9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3",
+    "directory": "SDL3-3.4.18"
+  },
+  {
+    "name": "simde",
+    "url": "https://github.com/simd-everywhere/simde/archive/refs/tags/v0.8.2.tar.gz",
+    "sha256": "ed2a3268658f2f2a9b5367628a85ccd4cf9516460ed8604eed369653d49b25fb",
+    "directory": "simde-0.8.2"
+  },
+  {
+    "name": "Vulkan-Headers",
+    "url": "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/vulkan-sdk-1.4.350.1.tar.gz",
+    "sha256": "6d1bb65e49520344cc0a48af3dc02e993781efff14c7ebdcb8ae9fa23ddf7e83",
+    "directory": "Vulkan-Headers-vulkan-sdk-1.4.350.1"
+  },
+  {
+    "name": "MoltenVK",
+    "url": "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar",
+    "sha256": "f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e",
+    "directory": "MoltenVK"
+  },
+  {
+    "name": "unshield",
+    "url": "https://github.com/twogood/unshield/archive/refs/tags/1.6.2.tar.gz",
+    "sha256": "a937ef596ad94d16e7ed2c8553ad7be305798dcdcfd65ae60210b1e54ab51a2f",
+    "directory": "unshield-1.6.2"
+  }
+]

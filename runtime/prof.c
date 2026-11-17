@@ -10,7 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#ifdef __APPLE__
+#include <sys/ucontext.h>
+#else
 #include <ucontext.h>
+#endif
 #include "runtime.h"
 
 #define MAX_SAMPLES (1u << 22)
@@ -27,7 +31,15 @@ static void on_prof(int sig, siginfo_t *si, void *ucv)
         return;
     unsigned i = __atomic_fetch_add(&nsamples, 1, __ATOMIC_RELAXED);
     if (i < MAX_SAMPLES)
+#if defined(__APPLE__) && defined(__aarch64__)
+        samples[i] = (uintptr_t)uc->uc_mcontext->__ss.__pc;
+#elif defined(__APPLE__)
+        samples[i] = (uintptr_t)uc->uc_mcontext->__ss.__rip;
+#elif defined(__aarch64__)
+        samples[i] = (uintptr_t)uc->uc_mcontext.pc;
+#else
         samples[i] = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
+#endif
 }
 
 static int cmp_ptr(const void *a, const void *b)

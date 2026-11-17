@@ -1,3 +1,4 @@
+#if !defined(__aarch64__)
 /* x87 operations the generated code calls out of line. They run the real x87 instruction on
    the host so results match the original bit for bit (the host's control word mirrors the
    program's, with exceptions masked). */
@@ -260,3 +261,5 @@ void fpu_depth_fail(CPU *c, uint32_t at)
     fatal("x87 stack depth changed by the call at %08x (top %u): add the callee's effect to the "
           "translator (tools/fpustack.py)", at, c->ftop);
 }
+
+#endif

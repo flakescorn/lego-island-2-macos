@@ -5,6 +5,7 @@
    window procedure as WM_KEYDOWN/WM_KEYUP (+ WM_CHAR via TranslateMessage). Alt+Enter toggles
    between a window and borderless fullscreen and is not passed on. */
 #include <math.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <SDL3/SDL.h>
@@ -27,6 +28,15 @@ int start_fullscreen;                   /* --fullscreen: go fullscreen at the fi
 static SDL_AudioStream *audio;
 static float *mixbuf;
 static int mixcap, audio_rate;
+/* Opt-in diagnostics of the real output stream; no microphone or audio capture. */
+static int audio_stats_on;
+static atomic_ulong audio_stat_frames;
+static _Atomic(float) audio_stat_peak;
+static void audio_stats(void)
+{
+    LOG(LOG_ALWAYS,"SDL audio output: %lu stereo frames submitted, peak %.6f",
+        atomic_load(&audio_stat_frames),(double)atomic_load(&audio_stat_peak));
+}
 
 static void audio_cb(void *ud, SDL_AudioStream *s, int additional, int total)
 {
@@ -38,11 +48,20 @@ static void audio_cb(void *ud, SDL_AudioStream *s, int additional, int total)
         mixbuf = realloc(mixbuf, mixcap * 2 * sizeof(float));
     }
     sound_mix(mixbuf, frames, audio_rate);
+    if (audio_stats_on) {
+        float peak=0;
+        for (int i=0;i<frames*2;i++) if (fabsf(mixbuf[i])>peak) peak=fabsf(mixbuf[i]);
+        atomic_fetch_add(&audio_stat_frames,(unsigned long)frames);
+        float prev=atomic_load(&audio_stat_peak);
+        while (peak>prev && !atomic_compare_exchange_weak(&audio_stat_peak,&prev,peak)) {}
+    }
     SDL_PutAudioStreamData(s, mixbuf, frames * 2 * (int)sizeof(float));
 }
 
 static void audio_open(void)
 {
+    audio_stats_on=getenv("LI2_AUDIO_STATS")!=NULL;
+    if (audio_stats_on) atexit(audio_stats);
     SDL_AudioSpec dev;
     int sample_frames = 512;
     if (!SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &dev, &sample_frames)) {

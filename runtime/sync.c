@@ -162,7 +162,9 @@ static void det_schedule(int from, int yielding)
 #include <dirent.h>
 #include <execinfo.h>
 #include <signal.h>
+#ifndef __APPLE__
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 static volatile unsigned long det_turns;
 static void det_stack(int sig)
@@ -170,7 +172,13 @@ static void det_stack(int sig)
     void *bt[24];
     int n = backtrace(bt, 24);
     char head[64];
+#ifdef __APPLE__
+    uint64_t tid = 0;
+    pthread_threadid_np(NULL, &tid);
+    int k = snprintf(head, sizeof head, "--- thread %llu:\n", (unsigned long long)tid);
+#else
     int k = snprintf(head, sizeof head, "--- thread %ld:\n", (long)syscall(SYS_gettid));
+#endif
     if (write(2, head, k) < 0) {}
     backtrace_symbols_fd(bt, n, 2);
     (void)sig;
@@ -185,6 +193,10 @@ static void *det_watch(void *arg)
         if (++same != 5) continue;
         if (write(2, "--test: the turn is stuck; stacks:\n", 36) < 0) {}
         signal(SIGUSR2, det_stack);
+#ifdef __APPLE__
+        /* No /proc or tgkill on Darwin. Report the watchdog stack; use lldb for all threads. */
+        det_stack(SIGUSR2);
+#else
         DIR *d = opendir("/proc/self/task");
         struct dirent *e;
         while (d && (e = readdir(d)))
@@ -193,6 +205,7 @@ static void *det_watch(void *arg)
                 usleep(50000);
             }
         if (d) closedir(d);
+#endif
     }
     (void)arg;
     return NULL;
@@ -312,6 +325,15 @@ API(KERNEL32, CreateEventA, 4)
         ARG(3) ? gstr(ARG(3)) : "unnamed", h);
     set_last_error(0);
     return h;
+}
+
+/* DirectInput buffered events use the same signal as Win32 SetEvent. */
+void event_signal(uint32_t handle)
+{
+    pthread_mutex_lock(&klock);
+    Event *e = handle_get(handle, H_EVENT);
+    if (e) { e->signalled = 1; kick(); }
+    pthread_mutex_unlock(&klock);
 }
 
 API(KERNEL32, SetEvent, 1)

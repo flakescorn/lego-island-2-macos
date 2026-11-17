@@ -11,3 +11,20 @@ __pycache__/
 !third_party/pl_mpeg/
 !third_party/dmusic/
 .venv
+# Proprietary inputs and locally compiled app bundles, at any depth
+*.[iI][sS][oO]
+*.[eE][xX][eE]
+*.[cC][aA][bB]
+*.[dD][lL][sS]
+_[dD][aA][tT][aA]/
+*.app/
+.DS_Store
+dist/
+*.zip
+*.cap
+*.lgo
+*.mpg
+*.mp4
+*.bob
+*.bod
+*.dylib

@@ -4,18 +4,37 @@
   "wikidata": "Q2132221",
   "system": "PC (Windows)",
   "type": "recomp",
-  "original": { "revision": "English Version 2", "sha1": "0d43741e15bc309c3bb370d4eb49ec142d149ca9" },
-  "project": "LEGO Island 2 Recompiled",
+  "original": {
+    "revision": "English Version 1",
+    "sha1": "1dd65fa89381a1aecdeb9f52f372b36b233d7732"
+  },
+  "project": "LEGO Island 2 for macOS",
   "status": "in-progress",
-  "targets": ["Linux"],
+  "targets": [
+    "macOS ARM64"
+  ],
   "toolchain": "1nsane-recompiled",
   "approach": "Static recompilation of the Windows exe to C, with a Windows and DirectX stand-in on SDL3 and Vulkan",
-  "started": "2026-10-25",
-  "maintainers": [{ "name": "AntAir267", "link": "https://github.com/AntAir267" }],
-  "links": [
-    { "label": "Build guide", "url": "https://github.com/AntAir267/li2-recompiled/blob/main/BUILDING.md" },
-    { "label": "Design notes", "url": "https://github.com/AntAir267/li2-recompiled/blob/main/DESIGN.md" }
+  "started": "2026-11-17",
+  "maintainers": [
+    {
+      "name": "flakescorn",
+      "link": "https://github.com/flakescorn"
+    }
   ],
-  "help": ["Playing it start to finish and reporting bugs", "Testing the areas past the town"],
-  "notes": "Early work. The town, music and sound, movies and a controller work, but nobody has played it start to finish yet; the other areas have only had scripted test runs. Adds widescreen, a frame-rate fix and optional button prompts."
+  "links": [
+    {
+      "label": "Upstream translator/runtime",
+      "url": "https://github.com/AntAir267/li2-recompiled"
+    },
+    {
+      "label": "macOS setup",
+      "url": "https://github.com/flakescorn/lego-island-2-macos/blob/main/MACOS.md"
+    }
+  ],
+  "help": [
+    "Playing it start to finish and reporting bugs",
+    "Testing the areas past the town"
+  ],
+  "notes": "Experimental native Apple Silicon port and local ISO-import launcher based on AntAir267/li2-recompiled. English Version 1 town, movement, jump and save/load tested on M4. Full playthrough unverified. Original game inputs and generated game code are private local outputs, never public artifacts."
 }

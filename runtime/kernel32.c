@@ -110,9 +110,8 @@ void sysdlls_map(void)
 {
     for (size_t i = 0; i < sizeof sysdlls / sizeof *sysdlls; i++) {
         uint32_t b = sysdlls[i].base;
-        void *m = mmap((void *)(uintptr_t)b, 0x1000, PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-        if (m != (void *)(uintptr_t)b) {
+        void *m = guest_map((void *)GP(b), 0x1000, PROT_READ | PROT_WRITE);
+        if (m != (void *)GP(b)) {
             LOG(LOG_ALWAYS, "cannot place the %s header at %08x", sysdlls[i].name, b);
             continue;
         }

@@ -519,3 +519,5 @@ void padgame_frame(unsigned long frame) { (void)frame; }
 /* force feedback: the game has none, so no rumble is asked for */
 int ifc_rumble_wanted(void) { return 0; }
 void ifc_frame(unsigned long frame) { (void)frame; }
+
+uint32_t game_movie_skip_flag(void) { return 0x5d51700u; }

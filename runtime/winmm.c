@@ -38,7 +38,7 @@ static void *timer_main(void *arg)
     for (;;) {
         next.tv_nsec += (long)t->delay * 1000000L;
         while (next.tv_nsec >= 1000000000L) { next.tv_sec++; next.tv_nsec -= 1000000000L; }
-        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL) == EINTR) {}
+        while (host_sleep_until(&next) == EINTR) {}
         if (t->stop)
             break;
         guest_call(t->cpu, t->callback, 5, t->id, 0, t->user, 0, 0);
